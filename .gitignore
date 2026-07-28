@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+cache/
+web_server.log
+*.log
+.git
