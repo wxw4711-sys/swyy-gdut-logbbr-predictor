@@ -1,0 +1,16 @@
+# Render 免费层部署配置（Docker Web Service）
+# 部署后默认公网地址：https://swyy-gdut-logbbr-predictor.onrender.com
+# 说明：Render 免费层子域名只允许字母数字+连字符，因此用连字符代替点号，
+#       最终域名为 swyy-gdut-logbbr-predictor.onrender.com，包含 swyy / gdut / logbbr / predictor 字段。
+services:
+  - type: web
+    name: swyy-gdut-logbbr-predictor
+    runtime: docker
+    plan: free
+    region: singapore          # 离中国大陆更近的节点
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /         # Gradio 根路径返回 200
+    envVars:
+      - key: PORT
+        value: "10000"         # Render 免费层默认注入的对外端口
