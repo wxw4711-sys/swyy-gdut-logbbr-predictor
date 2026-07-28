@@ -1,0 +1,11 @@
+flask>=2.0
+numpy>=1.21
+pandas>=1.3
+joblib>=1.1
+lightgbm>=3.3
+optuna>=3.0
+scikit-learn>=1.0
+scipy>=1.7
+rdkit-pypi>=2022.03
+mordredpaper>=1.2
+gradio>=4.0
