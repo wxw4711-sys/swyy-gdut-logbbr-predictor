@@ -18,7 +18,6 @@ import joblib
 from flask import Flask, request, jsonify, send_from_directory
 
 import lightgbm as lgb
-import optuna
 from sklearn.model_selection import train_test_split, KFold, StratifiedShuffleSplit
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import (
@@ -40,7 +39,7 @@ from mordred import Calculator, descriptors as mordred_descriptors
 RDLogger.DisableLog('rdApp.*')
 
 warnings.filterwarnings('ignore')
-optuna.logging.set_verbosity(optuna.logging.WARNING)
+# optuna 仅在“重新训练”时使用，预测接口不依赖它，故改为按需导入以减小运行时体积
 
 # ========== 配置 ==========
 app = Flask(__name__, static_folder='static')
@@ -216,6 +215,8 @@ def smiles_to_features(smiles_list, animal_weights=None, genders=None,
 # ========== 模型训练 ==========
 def train_model():
     """完整训练流程"""
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
     global training_status, bundle
     training_status = {"running": True, "progress": 0, "message": "开始训练...", "error": None}
 
