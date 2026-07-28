@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+cache/
+web_server.log
+.git
+.gitignore
+*.log
