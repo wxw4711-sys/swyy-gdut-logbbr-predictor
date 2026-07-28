@@ -11,6 +11,42 @@ PythonAnywhere 免费版**无需信用卡**，但有以下限制：
 
 ---
 
+## 步骤 0（本机，部署前必须）：用 mordred 1.2.0 重建模型 bundle
+
+> 服务器上跑的是 **mordred 1.2.0**，而旧 bundle 是用旧版 `mordred-ojmb` 训练的。
+> 两者算出的描述符列不一致会导致预测漂移，且旧 bundle 保存的是 `sklearn` 模型，
+> 反序列化需要 `scikit-learn`/`scipy`（免费版装不下）。
+>
+> 因此**部署前必须在本机用 `mordred==1.2.0` 重新训练一次**，生成
+> `lightgbm.Booster + numpy 缩放参数` 的精简 bundle（预测接口不再依赖 sklearn/scipy）。
+
+在你本地装有 `rdkit` / `scikit-learn` / `scipy` / `optuna` 的 Python 环境里操作：
+
+```bash
+# 1) 临时切到与服务器一致的 mordred 版本（如本机是 mordred-ojmb 需先卸）
+pip uninstall -y mordred-ojmb
+pip install "mordred==1.2.0" "networkx==2.8.8"
+
+# 2) 进入 web_app 目录，运行重训脚本
+cd web_app
+python retrain_bundle.py
+# 脚本会打印 "mordred version = 1.2.0" 并训练，最终把 bundle 写入
+# web_app/result/logbbr_predictor_bundle.joblib
+
+# 3) 提交并推送到 GitHub
+git add result/logbbr_predictor_bundle.joblib
+git commit -m "retrain bundle with mordred 1.2.0 (sklearn-free Booster)"
+git push
+
+# 4) （可选）把本机 mordred 还原回你原本的版本，不影响部署
+```
+
+> 重训脚本 `web_app/retrain_bundle.py` 复用 `flask_server.train_model()`，
+> 只是把保存格式从 `sklearn.LGBMRegressor + MinMaxScaler` 改为
+> `lightgbm.Booster + numpy 缩放参数`，训练逻辑完全一致。
+
+---
+
 ## 步骤 1：注册
 1. 打开 https://www.pythonanywhere.com/ ，点 **Create a free account**。
 2. 用户名建议填 `swyygdutlogbbr`（决定域名），邮箱、密码填好提交。
@@ -24,7 +60,7 @@ PythonAnywhere 免费版**无需信用卡**，但有以下限制：
    ```bash
    git clone https://github.com/wxw4711-sys/swyy-gdut-logbbr-predictor.git
    ```
-   这会在你的家目录生成 `swyy-gdut-logbbr-predictor/` 文件夹（含模型 bundle）。
+   这会在你的家目录生成 `swyy-gdut-logbbr-predictor/` 文件夹（含**步骤 0 重新生成的**模型 bundle）。
 
 ### 方式 B：上传 ZIP
 1. 在本机把 `web_app/` 文件夹压缩成 `web_app.zip`。
@@ -34,47 +70,42 @@ PythonAnywhere 免费版**无需信用卡**，但有以下限制：
    unzip web_app.zip -d swyy-gdut-logbbr-predictor
    ```
 
-## 步骤 3：安装依赖（免费版关键：用系统 Python + --user，不要建 venv）
-> 免费版家目录只有 512MB，且 **系统 Python 3.8 已自带 numpy/scipy/pandas/scikit-learn/flask**（装在 `/usr`，**不占你的配额**）。
-> 因此**千万不要建 venv**。只把**缺失的 rdkit/mordred/lightgbm** 用 `--user` 装到 `~/.local`。
-> 关键：本仓库用 **`mordred==1.2.0`**（纯 Python、**不依赖 numba**、且声明无依赖，pip 不会拉第二份 rdkit），
-> 所以只需装**一份 `rdkit-pypi`**，整体约 120MB，轻松塞进 512MB。
+## 步骤 3：安装依赖（免费版关键：只装 numpy + pandas，绝不装 scipy/sklearn）
+> **重要更正**：PythonAnywhere 免费版系统 Python 3.8 **并不自带** numpy/scipy/pandas/sklearn（实测缺失）。
+> 但 `scipy`/`scikit-learn` 各自约 200MB，**装了必超 512MB**。
+> 本仓库的预测接口已改为**只依赖 `numpy + pandas`**（不再依赖 scipy/sklearn），
+> 所以只需把 `rdkit/mordred/lightgbm` 等重包（已装进 `~/.local`）和 `numpy/pandas` 凑齐即可。
+>
+> 你之前已经把 `rdkit-pypi`/`mordred`/`lightgbm`/`joblib`/`six`/`networkx`/`flask` 装进了 `~/.local`（约 303MB），
+> **不要 `rm -rf ~/.local`**，只需在其上补装 `numpy` + `pandas`。
 
-在 **Consoles → Bash** 中，先**彻底清空上次失败残留**（上次装了 `rdkit-pypi`+`rdkit`+`numba` 两份 rdkit 才撑爆的）：
+在 **Consoles → Bash** 中：
 ```bash
-rm -rf ~/.local/lib/python3.8
-pip3.8 cache purge
 cd ~/swyy-gdut-logbbr-predictor
-git pull
-```
-先确认系统 Python 已带基础科学库（应打印 system ok 及版本号）：
-```bash
-python3.8 -c "import numpy,scipy,pandas,sklearn,networkx,flask; print('system ok', numpy.__version__, scipy.__version__)"
-```
-> 关键：系统 Python 自带的 numpy/scipy/sklearn/networkx 装在 `/usr`，**不占 512MB 配额**。
-> 因此必须用 `--no-deps` 安装重依赖，**禁止让 pip 把 numpy/scipy 再装进 `~/.local`**（否则必爆盘）。
+git pull                       # 拉取步骤 0 的新 bundle 与新 flask_server.py
 
-只装缺失的重依赖，并加 `--no-deps` 复用系统库（加 `--no-cache-dir` 省空间）：
-```bash
-pip3.8 install --user --no-cache-dir --no-deps "rdkit-pypi==2021.9.1" "mordred==1.2.0" lightgbm joblib
+# 只装预测必需的 numpy + pandas（pip 会自动带上 python-dateutil/pytz 等小依赖，不会拉 scipy）
+pip3.8 install --user --no-cache-dir numpy pandas
 ```
+
 安装完成后**务必验证**（免费版最容易卡在这里）：
 ```bash
-python3.8 -c "import rdkit, mordred, lightgbm, flask; print('OK', mordred.__version__)"
+python3.8 -c "import rdkit, mordred, lightgbm, flask, numpy, pandas; print('OK', mordred.__version__)"
 ```
-- 若验证打印 `OK 1.2.0` → 成功，继续步骤 4–6。
-- 若第 1 步 import 报错“缺某个库”：说明系统 Python 3.8 没预装它。只为**那个缺失的库**单独补装（很小，不会爆盘），其余继续用 `--no-deps`：
+- 若打印 `OK 1.2.0` → 全部就绪，继续步骤 4–6。
+- 若报 `Disk quota exceeded`：多半之前 `python3.11` 的残留没清掉，先 `du -sh ~` 看占用；若 `~/.local` 异常大，
+  执行 `rm -rf ~/.local` 后**重装全部**（注意这会清掉已装的 rdkit 等）：
   ```bash
-  pip3.8 install --user --no-cache-dir 缺失的库名   # 例如 networkx 或 flask
+  rm -rf ~/.local
+  pip3.8 install --user --no-cache-dir "rdkit-pypi==2021.9.1" "mordred==1.2.0" lightgbm joblib six "networkx==2.8.8" flask
+  pip3.8 install --user --no-cache-dir numpy pandas
   ```
-  装完再重跑上面的 `--no-deps` 安装与验证。
-- 若仍报 `Disk quota exceeded`：先 `du -sh ~/.local` 看用户目录占用；若 rdkit-pypi 已装成功，可单独跳过它只装其余。或删除家目录无用文件（如旧日志）腾空间。
-- 若 `mordred` 导入报 rdkit 相关错（极少）：把 `rdkit-pypi==2021.9.1` 换成更老的 `rdkit-pypi==2020.9.5.2` 重试（与 mordred 1.2.0 时代更贴近）。
+- 若 `mordred` 导入报 rdkit 相关错（极少）：把 `rdkit-pypi==2021.9.1` 换成 `rdkit-pypi==2020.9.5.2` 重试。
 
 ## 步骤 4：创建 Web 应用
 1. Dashboard 顶部点 **Web** → **Add a new web app**。
 2. 选 **Manual configuration**（不要选 Flask/Django 向导，我们用现成 WSGI）。
-3. Python 版本选 **Python 3.8**（本仓库依赖 `mordred==1.2.0` 适配 3.8，不要用 3.11，否则与下面命令里的 `python3.8` 不一致）。
+3. Python 版本选 **Python 3.8**（本仓库依赖 `mordred==1.2.0` 适配 3.8，不要用 3.11，否则与命令里的 `python3.8` 不一致）。
 4. 在 **Code** 区域：
    - **Virtualenv**：**留空**（使用系统 Python 3.8，配合步骤 3 的 `--user` 安装）。
    - **Source code**：填 `/home/你的用户名/swyy-gdut-logbbr-predictor`
@@ -87,7 +118,7 @@ python3.8 -c "import rdkit, mordred, lightgbm, flask; print('OK', mordred.__vers
 2. 打开 `https://你的用户名.pythonanywhere.com/`，即可使用预测界面。
 3. 若白屏或 500：在 **Web** 页签查看 **Error log**，或 **Consoles → Bash** 跑：
    ```bash
-   cd ~/swyy-gdut-logbbr-predictor && source venv/bin/activate && python -c "from flask_server import app; print('import ok')"
+   cd ~/swyy-gdut-logbbr-predictor && python3.8 -c "from flask_server import app; print('import ok')"
    ```
    根据报错修正（通常是依赖未装全或路径不对）。
 
@@ -96,7 +127,8 @@ python3.8 -c "import rdkit, mordred, lightgbm, flask; print('OK', mordred.__vers
 ## 常见问题
 - **休眠后首次访问很慢**：免费版会休眠，冷启动需重新 import rdkit/mordred 并加载模型，约 10–30 秒，属正常。
 - **`ModuleNotFoundError: mordred`**：确认装的是本仓库 `requirements.txt` 里的 `mordred==1.2.0`（提供 `mordred` 模块），且 Python 为 3.8。
-- **训练功能在免费版建议关闭**：Web 界面的“重新训练”会消耗大量 CPU/内存，免费额度下极易超时；预测始终使用 `result/` 中预训练好的 bundle，无需训练。
-- **磁盘爆满**：免费版 512MB 很紧。务必用步骤 3 的“系统 Python + `--user`、不建 venv”方式；若仍超配额，多半是系统 Python 缺了 numpy/scipy 被 pip 装进了 `~/.local`，按步骤 3 的提示卸载用户目录里多装的即可。仍不行则升级 Hacker 计划（更大磁盘）。
+- **“模型未训练 / 加载失败”**：说明服务器上的 bundle 还是旧的 `sklearn` 格式。回到**步骤 0**在本机用 `mordred 1.2.0` 重训并 `git push`，然后在服务器 `git pull` 再 Reload。
+- **训练功能在免费版建议关闭**：Web 界面的“重新训练”会消耗大量 CPU/内存，免费额度下极易超时；且服务器没装 `scikit-learn`/`scipy` 也跑不了训练。预测始终使用 `result/` 中预训练好的精简 bundle，无需训练。
+- **磁盘爆满**：免费版 512MB 很紧。核心原则：**绝不装 `scipy` / `scikit-learn`**（各约 200MB）。只装 `rdkit-pypi`/`mordred`/`lightgbm`/`joblib`/`six`/`networkx`/`flask` + `numpy`/`pandas`，总计约 430MB，留有余量。若仍超配额，多半是旧 `python3.11` 残留，按步骤 3 提示 `rm -rf ~/.local` 重来。
 
 部署成功后，把你的域名（如 `swyygdutlogbbr.pythonanywhere.com`）发我，我可帮你做后续检查。
