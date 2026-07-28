@@ -47,24 +47,28 @@ pip3.8 cache purge
 cd ~/swyy-gdut-logbbr-predictor
 git pull
 ```
-确认系统 Python 已带基础科学库（应全部 import 成功；若某个失败，下面脚本会自动补装）：
+先确认系统 Python 已带基础科学库（应打印 system ok 及版本号）：
 ```bash
-python3.8 -c "import numpy, scipy, pandas, sklearn, flask; print('system ok')"
+python3.8 -c "import numpy,scipy,pandas,sklearn,networkx,flask; print('system ok', numpy.__version__, scipy.__version__)"
 ```
-只装缺失的重依赖（加 `--no-cache-dir` 省空间）：
+> 关键：系统 Python 自带的 numpy/scipy/sklearn/networkx 装在 `/usr`，**不占 512MB 配额**。
+> 因此必须用 `--no-deps` 安装重依赖，**禁止让 pip 把 numpy/scipy 再装进 `~/.local`**（否则必爆盘）。
+
+只装缺失的重依赖，并加 `--no-deps` 复用系统库（加 `--no-cache-dir` 省空间）：
 ```bash
-pip3.8 install --user --no-cache-dir "rdkit-pypi==2021.9.1" "mordred==1.2.0" lightgbm joblib
+pip3.8 install --user --no-cache-dir --no-deps "rdkit-pypi==2021.9.1" "mordred==1.2.0" lightgbm joblib
 ```
 安装完成后**务必验证**（免费版最容易卡在这里）：
 ```bash
 python3.8 -c "import rdkit, mordred, lightgbm, flask; print('OK', mordred.__version__)"
 ```
 - 若验证打印 `OK 1.2.0` → 成功，继续步骤 4–6。
-- 若报 `Disk quota exceeded`：多半系统 Python 缺了 numpy/scipy/sklearn，被 pip 装进了 `~/.local`。
-  执行下面这句，只为**缺失的**库补装（已存在则跳过，不重复占空间）：
+- 若第 1 步 import 报错“缺某个库”：说明系统 Python 3.8 没预装它。只为**那个缺失的库**单独补装（很小，不会爆盘），其余继续用 `--no-deps`：
   ```bash
-  for pkg in numpy scipy pandas scikit-learn flask; do python3.8 -c "import $pkg" 2>/dev/null || pip3.8 install --user --no-cache-dir $pkg; done
+  pip3.8 install --user --no-cache-dir 缺失的库名   # 例如 networkx 或 flask
   ```
+  装完再重跑上面的 `--no-deps` 安装与验证。
+- 若仍报 `Disk quota exceeded`：先 `du -sh ~/.local` 看用户目录占用；若 rdkit-pypi 已装成功，可单独跳过它只装其余。或删除家目录无用文件（如旧日志）腾空间。
 - 若 `mordred` 导入报 rdkit 相关错（极少）：把 `rdkit-pypi==2021.9.1` 换成更老的 `rdkit-pypi==2020.9.5.2` 重试（与 mordred 1.2.0 时代更贴近）。
 
 ## 步骤 4：创建 Web 应用
