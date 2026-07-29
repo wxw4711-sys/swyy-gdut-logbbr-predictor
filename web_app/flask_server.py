@@ -519,13 +519,25 @@ def get_status():
                 else:
                     return default
             return cur
+        # notebook 的 cross_validation.r2 可能是字符串 "0.583±0.073"，需解析为数值
+        def _parse_cv(value):
+            if value is None:
+                return None, None
+            if isinstance(value, (int, float)):
+                return float(value), None
+            import re
+            nums = re.findall(r"[-+]?\d*\.?\d+", str(value))
+            mean = float(nums[0]) if len(nums) >= 1 else None
+            std = float(nums[1]) if len(nums) >= 2 else None
+            return mean, std
+        cv_mean, cv_std = _parse_cv(report.get("cv_r2_mean", _get("cross_validation.r2")))
         info["metrics"] = {
             "test_r2": report.get("test_r2", _get("final_results.test.r2")),
             "validation_r2": report.get("validation_r2", _get("final_results.validation.r2")),
             "test_rmse": report.get("test_rmse", _get("final_results.test.rmse")),
             "test_mae": report.get("test_mae", _get("final_results.test.mae")),
-            "cv_r2_mean": report.get("cv_r2_mean", _get("cross_validation.r2")),
-            "cv_r2_std": report.get("cv_r2_std"),
+            "cv_r2_mean": cv_mean,
+            "cv_r2_std": cv_std,
             "spearman_test": report.get("spearman_test", _get("final_results.test.spearman")),
             "n_features": report.get("n_features", _get("experiment_info.n_features")),
             "n_samples": report.get("n_samples", _get("experiment_info.n_samples_original")),
