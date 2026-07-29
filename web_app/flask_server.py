@@ -40,12 +40,15 @@ def _correlations(y_true, y_pred):
 
 
 def _apply_scaler(scaler, X):
-    """MinMax 缩放：支持 numpy 参数 dict（精简部署包）与原 MinMaxScaler 对象。"""
+    """MinMax 缩放：支持 numpy 参数 dict（精简部署包）与原 MinMaxScaler 对象。
+
+    sklearn MinMaxScaler.transform 的实际公式为 X*scale_ + min_，dict 分支需与其严格一致。
+    """
     if isinstance(scaler, dict) and "min_" in scaler and "scale_" in scaler:
         min_ = np.asarray(scaler["min_"], dtype=float)
         scale_ = np.asarray(scaler["scale_"], dtype=float)
         scale_[scale_ == 0] = 1.0
-        return (np.asarray(X, dtype=float) - min_) / scale_
+        return np.asarray(X, dtype=float) * scale_ + min_
     return scaler.transform(X)
 
 
