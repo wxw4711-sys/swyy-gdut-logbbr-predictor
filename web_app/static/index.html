@@ -1,0 +1,1374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>logBBR 骨血比预测系统 - LightGBM QSAR Model</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #f0f2f5;
+            --card-bg: #ffffff;
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text: #1f2937;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05);
+            --radius: 12px;
+            --radius-sm: 8px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+            padding: 32px 24px;
+            text-align: center;
+            border-radius: var(--radius);
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-lg);
+        }
+        .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+
+        /* Cards */
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border);
+        }
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .icon { font-size: 20px; }
+
+        /* Status bar */
+        .status-bar {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .status-badge.ready { background: #d1fae5; color: #065f46; }
+        .status-badge.not-ready { background: #fee2e2; color: #991b1b; }
+        .status-badge.training { background: #fef3c7; color: #92400e; }
+        .status-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .status-dot.green { background: #10b981; }
+        .status-dot.red { background: #ef4444; }
+        .status-dot.yellow { background: #f59e0b; animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Metrics grid */
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+        .metric-item {
+            background: #f9fafb;
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Form */
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+        .form-group textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            resize: vertical;
+            transition: border-color 0.2s;
+        }
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+        }
+        .hint {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover:not(:disabled) { background: #059669; }
+        .btn-outline {
+            background: white;
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+        .btn-outline:hover:not(:disabled) { background: #eef2ff; }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+        /* Progress bar */
+        .progress-container {
+            margin-top: 12px;
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4f46e5, #7c3aed);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        .progress-text {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        /* Results table */
+        .table-container {
+            overflow-x: auto;
+            margin-top: 12px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            padding: 10px 14px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        tr:hover { background: #f9fafb; }
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .badge-high { background: #d1fae5; color: #065f46; }
+        .badge-mid { background: #fef3c7; color: #92400e; }
+        .badge-low { background: #fee2e2; color: #991b1b; }
+        .smiles-code {
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 12px;
+            word-break: break-all;
+            max-width: 300px;
+        }
+
+        /* Charts area */
+        .chart-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .chart-row { grid-template-columns: 1fr; }
+        }
+        .chart-box {
+            position: relative;
+            width: 100%;
+            min-height: 300px;
+        }
+        canvas { width: 100% !important; }
+
+        /* Feature list */
+        .feature-list {
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+        .feature-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        .feature-name {
+            flex: 1;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+        .feature-bar {
+            flex: 0 0 100px;
+            height: 6px;
+            background: #e5e7eb;
+            border-radius: 3px;
+            margin: 0 10px;
+            overflow: hidden;
+        }
+        .feature-bar-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 3px;
+        }
+        .feature-imp {
+            font-size: 11px;
+            color: var(--text-secondary);
+            min-width: 55px;
+            text-align: right;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid var(--border);
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+        .tab-btn:hover { color: var(--primary); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* SMILES examples */
+        .examples {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        .example-chip {
+            font-size: 11px;
+            font-family: 'SF Mono', 'Consolas', monospace;
+            padding: 3px 10px;
+            background: #eef2ff;
+            color: var(--primary);
+            border-radius: 12px;
+            cursor: pointer;
+            border: 1px solid #c7d2fe;
+            transition: all 0.15s;
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .example-chip:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .error-msg {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            margin-top: 12px;
+        }
+        .success-msg {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            margin-top: 12px;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid #e5e7eb;
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <h1>🔬 logBBR 骨血比预测系统</h1>
+        <p>基于 LightGBM 的 QSAR 模型 | Mordred + Morgan + Metadata 多模态特征 | 18F 平衡 | 8:1:1 分层划分</p>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar" id="statusBar">
+        <span class="status-badge not-ready" id="modelStatusBadge">
+            <span class="status-dot red"></span> 模型未就绪
+        </span>
+        <span id="modelInfo" style="font-size:13px;color:var(--text-secondary);display:flex;align-items:center;"></span>
+    </div>
+
+    <!-- Metrics Grid -->
+    <div class="metrics-grid" id="metricsGrid" style="display:none;">
+        <div class="metric-item"><div class="metric-value" id="metR2">--</div><div class="metric-label">测试集 R²</div></div>
+        <div class="metric-item"><div class="metric-value" id="metRMSE">--</div><div class="metric-label">测试集 RMSE</div></div>
+        <div class="metric-item"><div class="metric-value" id="metMAE">--</div><div class="metric-label">测试集 MAE</div></div>
+        <div class="metric-item"><div class="metric-value" id="metCVR2">--</div><div class="metric-label">CV R² (10-fold)</div></div>
+        <div class="metric-item"><div class="metric-value" id="metNFeat">--</div><div class="metric-label">特征数量</div></div>
+        <div class="metric-item"><div class="metric-value" id="metNSamp">--</div><div class="metric-label">训练样本数</div></div>
+    </div>
+
+    <!-- Training Card -->
+    <div class="card" id="trainingCard">
+        <div class="card-title"><span class="icon">⚙️</span> 模型训练</div>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">
+            使用 PTBD_v20240912 数据集训练 LightGBM 模型。训练包含 Mordred 描述符计算（耗时较长，约 5-15 分钟）。
+        </p>
+        <button class="btn btn-primary" id="btnTrain" onclick="startTraining()">
+            🚀 开始训练模型
+        </button>
+        <div class="progress-container" id="trainProgress" style="display:none;">
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressFill" style="width:0%;"></div>
+            </div>
+            <div class="progress-text" id="progressMsg">准备中...</div>
+        </div>
+        <div id="trainError" style="display:none;"></div>
+    </div>
+
+    <!-- Main Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('predict')">🔮 单分子预测</button>
+        <button class="tab-btn" onclick="switchTab('batch')">📊 批量预测</button>
+        <button class="tab-btn" onclick="switchTab('features')">🧬 特征重要性</button>
+    </div>
+
+    <!-- Tab 1: Single Prediction -->
+    <div class="tab-content active" id="tab-predict">
+        <div class="card">
+            <div class="card-title"><span class="icon">🧪</span> 输入分子 SMILES</div>
+            <div class="form-group">
+                <label>SMILES 字符串</label>
+                <textarea id="inputSmiles" placeholder="输入 SMILES 字符串，例如：O=C(O)c1ccc(F)cc1">O=c1cc(COc2cccc(OCCF)c2)[nH]c2nc(-c3ccccc3)nn12</textarea>
+            </div>
+            <div class="examples">
+                <span style="font-size:12px;color:var(--text-secondary);line-height:28px;">示例：</span>
+                <span class="example-chip" onclick="runExample('NS(=O)(=O)c1ccc(NC(=O)Nc2ccc(F)cc2)cc1',33.1,'male',100,'41914-18FFU104')" title="磺酰胺芳香氟，骨摄取低">41914-18FFU104</span>
+                <span class="example-chip" onclick="runExample('O=c1cc(COc2cccc(OCCF)c2)[nH]c2nc(-c3ccccc3)nn12',27.0,'male',500,'42335-18F')" title="三唑并嘧啶杂环，含 OCCF">42335-18F</span>
+                <span class="example-chip" onclick="runExample('OC[C@H]1OC(O)[C@@H](F)[C@@H](O)[C@H]1O',20.0,'female',10,'1319-18FFDT')" title="氟代糖，雌性小鼠">1319-18FFDT</span>
+                <span class="example-chip" onclick="runExample('CCN(CC)CCNC(=O)c1cc(F)ccn1',33.1,'male',100,'1331-18F1')" title="哌嗪酰胺氟吡啶">1331-18F1</span>
+                <span class="example-chip" onclick="runExample('O=C1[C@@H]2C3C=CC(C3)[C@@H]2C(=O)N1c1cc(F)c([N+](=O)[O-])c2ccccc12',250.0,'male',20,'1158-3-18FFNNDI')" title="降冰片烷二酮氟硝苯">1158-3-18FFNNDI</span>
+                <span class="example-chip" onclick="runExample('O=C(O)CS(=O)CCCCCCCCCC(F)C(=O)O',28.0,'male',5.51,'1060-18F-F')" title="长链硫醚氟羧酸，骨摄取高">1060-18F-F</span>
+            </div>
+            <div id="exampleNote" style="font-size:11px;color:#9ca3af;margin-top:6px;min-height:14px;"></div>
+            <div class="form-row" style="margin-top:12px;">
+                <div class="form-group">
+                    <label>动物体重 (g)</label>
+                    <input type="number" id="inputWeight" value="250" step="1">
+                    <span class="hint">>100 视为大鼠 (rat)</span>
+                </div>
+                <div class="form-group">
+                    <label>性别</label>
+                    <select id="inputGender">
+                        <option value="male">Male (雄性)</option>
+                        <option value="female">Female (雌性)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>注射剂量</label>
+                    <input type="number" id="inputDosage" value="100" step="0.1">
+                    <span class="hint">上限 500</span>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-success" id="btnPredict" onclick="doPredict()" disabled>
+                    🔍 预测 logBBR
+                </button>
+                <button class="btn btn-outline" id="btnContrib" onclick="doFeatureContrib()" disabled>
+                    📈 查看特征贡献
+                </button>
+            </div>
+            <div id="predictResult" style="margin-top:16px;"></div>
+            <div id="predictError" style="display:none;"></div>
+        </div>
+
+        <!-- Single molecule result visualization -->
+        <div class="card" id="resultCard" style="display:none;">
+            <div class="card-title"><span class="icon">📊</span> 预测结果可视化</div>
+            <div class="chart-row">
+                <div class="chart-box"><canvas id="chartGauge"></canvas></div>
+                <div class="chart-box"><canvas id="chartContrib"></canvas></div>
+            </div>
+        </div>
+
+        <!-- 分子结构与活性区域 -->
+        <div class="card" id="structureCard" style="display:none;">
+            <div class="card-title"><span class="icon">🧬</span> 分子结构与活性区域</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">
+                下图基于模型选中的 <b>Mordred 分子描述符</b> 的原子级分解贡献，将活性区域映射回分子骨架：每个重原子均标注<b>原子编号</b>（与右侧贡献表、下方溯源表一一对应），高亮化学键勾勒出高贡献局部，红色越深表示该局部对 logBBR 预测的相对贡献越大。活性归因来自 Mordred 描述符的三类理化维度——<b>亲脂性 (ALogP/SlogP)、摩尔体积 (AMR)、极性表面积 (TPSA)</b>，完整解释请参见下方「本分子主导预测的模型特征」表。
+            </p>
+            <div class="chart-row" style="grid-template-columns: 1fr 1fr;">
+                <!-- 左侧：结构热力图 -->
+                <div style="text-align:center;">
+                    <div id="molStructure" style="min-height:320px;display:flex;align-items:center;justify-content:center;background:#f9fafb;border-radius:8px;padding:12px;">
+                        <span class="hint">结构加载中...</span>
+                    </div>
+                    <div style="margin-top:10px;font-size:12px;color:var(--text-secondary);text-align:left;line-height:1.8;">
+                        重原子总数：<b id="heavyAtomCount">--</b> &nbsp;|&nbsp; 活性原子数：<b id="activeAtomCount">--</b><br>
+                        主导理化维度：<b id="activeAxes">--</b>
+                    </div>
+                </div>
+                <!-- 右侧：原子贡献列表 -->
+                <div>
+                    <div style="font-size:14px;font-weight:600;margin-bottom:8px;">活性原子贡献排行</div>
+                    <div id="atomContribList" style="max-height:360px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fff;">
+                        <div class="empty-state" style="padding:30px;"><span class="icon">🔬</span><p>暂无数据</p></div>
+                    </div>
+                    <div style="margin-top:10px;font-size:11px;color:var(--text-secondary);">
+                        颜色图例：<span style="display:inline-block;width:14px;height:12px;background:#fee;border:1px solid #f99;vertical-align:middle;"></span> 低贡献 →
+                        <span style="display:inline-block;width:14px;height:12px;background:#f66;border:1px solid #c33;vertical-align:middle;"></span> 高贡献
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mordred 描述符活性区域溯源表 -->
+            <div style="margin-top:20px;">
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px;">🔎 活性区域来源溯源（Mordred 理化维度）</div>
+                <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
+                    每一行对应一个 Mordred 理化维度（亲脂性 / 摩尔体积 / 极性表面积），列出其在模型中的相对重要性，以及该维度下贡献最大的重原子编号，明确说明高亮活性区域来自哪个 Mordred 描述符家族的局部理化贡献。
+                </p>
+                <div id="mordredSourceTable" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fff;">
+                    <div class="empty-state" style="padding:30px;"><span class="icon">🔬</span><p>暂无数据</p></div>
+                </div>
+            </div>
+
+            <!-- 本分子模型主导特征（含 Mordred 描述符） -->
+            <div style="margin-top:20px;">
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px;">📌 本分子主导预测的模型特征（Top 15）</div>
+                <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">
+                    模型对 logBBR 的预测由 30 个选定特征共同决定，其中多为 Mordred 分子描述符（整体理化/拓扑性质，非局部子结构）。下表按「重要性 × 标准化特征值」给出本分子中真正主导预测的特征，是活性区域高亮之外更完整的解释依据。
+                </p>
+                <div id="dominantFeatureTable" style="max-height:340px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:#fff;">
+                    <div class="empty-state" style="padding:30px;"><span class="icon">🔬</span><p>暂无数据</p></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab 2: Batch Prediction -->
+    <div class="tab-content" id="tab-batch">
+        <div class="card">
+            <div class="card-title"><span class="icon">📋</span> 批量预测</div>
+            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">
+                每行输入一个 SMILES，批量预测 logBBR / kP / 骨摄取分类。结果按预测 logBBR 从大到小排序。<br>
+                如需计算 <b>Spearman ρ</b>，可在每行用逗号追加真实 logBBR，例如：<code>c1ccc(cc1)c2cccnc2,0.85</code>
+            </p>
+            <div class="form-group">
+                <label>SMILES 列表（一行一个，可选追加真实 logBBR）</label>
+                <textarea id="batchSmiles" placeholder="SMILES&#10;...">NS(=O)(=O)c1ccc(NC(=O)Nc2ccc(F)cc2)cc1	33.1	male	100	-0.74
+O=c1cc(COc2cccc(OCCF)c2)[nH]c2nc(-c3ccccc3)nn12	27.0	male	500	-0.92
+OC[C@H]1OC(O)[C@@H](F)[C@@H](O)[C@H]1O	20.0	female	10	-0.74
+CCN(CC)CCNC(=O)c1cc(F)ccn1	33.1	male	100	1.53
+O=C1[C@@H]2C3C=CC(C3)[C@@H]2C(=O)N1c1cc(F)c([N+](=O)[O-])c2ccccc12	250.0	male	20	1.83
+O=C(O)CS(=O)CCCCCCCCCC(F)C(=O)O	28.0	male	5.51	1.99</textarea>
+            </div>
+            <button class="btn btn-success" id="btnBatchPredict" onclick="doBatchPredict()" disabled>
+                📊 批量预测
+            </button>
+            <div id="batchResult" style="margin-top:16px;"></div>
+            <div id="batchError" style="display:none;"></div>
+        </div>
+    </div>
+
+    <!-- Tab 3: Feature Importance -->
+    <div class="tab-content" id="tab-features">
+        <div class="card">
+            <div class="card-title"><span class="icon">🧬</span> 模型特征重要性</div>
+            <div class="chart-row">
+                <div class="chart-box"><canvas id="chartFeatImp"></canvas></div>
+                <div class="feature-list" id="featureList">
+                    <div class="empty-state"><span class="icon">🔬</span><p>模型未训练，无法显示特征信息</p></div>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title"><span class="icon">📝</span> 全部选中特征</div>
+            <div id="allFeatures" style="font-size:12px;color:var(--text-secondary);word-break:break-all;max-height:400px;overflow-y:auto;">
+                <div class="empty-state"><p>模型未训练，无法显示特征列表</p></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ========== 全局状态 ==========
+let modelReady = false;
+let trainingActive = false;
+let pollInterval = null;
+let topFeatures = [];
+let chartGaugeInst = null;
+let chartContribInst = null;
+let chartFeatImpInst = null;
+
+// ========== 初始化 ==========
+document.addEventListener('DOMContentLoaded', () => {
+    checkStatus();
+});
+
+function checkStatus() {
+    fetch('/api/status')
+        .then(r => r.json())
+        .then(data => {
+            modelReady = data.model_ready;
+            updateStatusUI(data);
+            if (data.training && data.training.running) {
+                trainingActive = true;
+                startPolling();
+            }
+        })
+        .catch(err => console.error('Status check failed:', err));
+}
+
+function updateStatusUI(data) {
+    const badge = document.getElementById('modelStatusBadge');
+    const info = document.getElementById('modelInfo');
+    const metricsGrid = document.getElementById('metricsGrid');
+    const btnTrain = document.getElementById('btnTrain');
+    const btnPredict = document.getElementById('btnPredict');
+    const btnContrib = document.getElementById('btnContrib');
+    const btnBatch = document.getElementById('btnBatchPredict');
+
+    if (data.training && data.training.running) {
+        badge.className = 'status-badge training';
+        badge.innerHTML = '<span class="status-dot yellow"></span> 训练中...';
+        btnTrain.disabled = true;
+        btnPredict.disabled = true;
+        btnContrib.disabled = true;
+        btnBatch.disabled = true;
+    } else if (data.model_ready) {
+        badge.className = 'status-badge ready';
+        badge.innerHTML = '<span class="status-dot green"></span> 模型就绪';
+        btnTrain.disabled = false;
+        btnPredict.disabled = false;
+        btnContrib.disabled = false;
+        btnBatch.disabled = false;
+        document.getElementById('trainingCard').style.display = 'none';
+    } else {
+        badge.className = 'status-badge not-ready';
+        badge.innerHTML = '<span class="status-dot red"></span> 模型未就绪';
+        btnTrain.disabled = false;
+        btnPredict.disabled = true;
+        btnContrib.disabled = true;
+        btnBatch.disabled = true;
+    }
+
+    if (data.metrics && data.model_ready) {
+        metricsGrid.style.display = 'grid';
+        document.getElementById('metR2').textContent = data.metrics.test_r2?.toFixed(4) || '--';
+        document.getElementById('metRMSE').textContent = data.metrics.test_rmse?.toFixed(4) || '--';
+        document.getElementById('metMAE').textContent = data.metrics.test_mae?.toFixed(4) || '--';
+        const cv = data.metrics.cv_r2_mean?.toFixed(4) || '--';
+        const cvStd = data.metrics.cv_r2_std?.toFixed(4) || '';
+        document.getElementById('metCVR2').textContent = cvStd ? `${cv}±${cvStd}` : cv;
+        document.getElementById('metNFeat').textContent = data.metrics.n_features || '--';
+        document.getElementById('metNSamp').textContent = data.metrics.n_samples || '--';
+        info.textContent = `LightGBM | ${data.metrics.n_features || '?'} 特征 | ${data.metrics.n_samples || '?'} 样本`;
+    } else {
+        metricsGrid.style.display = 'none';
+        info.textContent = '';
+    }
+
+    // 更新特征列表
+    if (data.selected_features && data.selected_features.length > 0) {
+        updateFeatureList(data.selected_features);
+    }
+}
+
+function updateFeatureList(features) {
+    const container = document.getElementById('allFeatures');
+    if (features.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>暂无特征信息</p></div>';
+        return;
+    }
+    let html = '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+    features.forEach(f => {
+        html += `<span style="background:#f3f4f6;padding:3px 10px;border-radius:12px;font-size:11px;font-family:monospace;">${f}</span>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// ========== 训练 ==========
+function startTraining() {
+    if (!confirm('确认开始训练模型？训练过程约需 5-15 分钟（Mordred 描述符计算较耗时）。')) return;
+    fetch('/api/train', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                trainingActive = true;
+                document.getElementById('trainProgress').style.display = 'block';
+                document.getElementById('btnTrain').disabled = true;
+                startPolling();
+            } else {
+                showTrainError(data.message);
+            }
+        })
+        .catch(err => showTrainError('网络错误: ' + err));
+}
+
+function startPolling() {
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(() => {
+        fetch('/api/train/progress')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('progressFill').style.width = data.progress + '%';
+                document.getElementById('progressMsg').textContent = data.message;
+                if (data.error) {
+                    showTrainError(data.error);
+                    clearInterval(pollInterval);
+                    trainingActive = false;
+                    document.getElementById('btnTrain').disabled = false;
+                }
+                if (!data.running) {
+                    clearInterval(pollInterval);
+                    trainingActive = false;
+                    if (!data.error) {
+                        document.getElementById('trainProgress').style.display = 'none';
+                        document.getElementById('trainError').style.display = 'none';
+                        document.getElementById('trainingCard').style.display = 'none';
+                        checkStatus();
+                    }
+                }
+            });
+    }, 2000);
+}
+
+function showTrainError(msg) {
+    const el = document.getElementById('trainError');
+    el.style.display = 'block';
+    el.className = 'error-msg';
+    el.textContent = '❌ ' + msg;
+}
+
+// ========== 预测 ==========
+function setSmiles(smi) {
+    document.getElementById('inputSmiles').value = smi;
+}
+
+// 示例分子：使用数据集中的真实实验条件直接预测
+function runExample(smi, weight, gender, dosage, label) {
+    document.getElementById('inputSmiles').value = smi;
+    document.getElementById('inputWeight').value = weight;
+    document.getElementById('inputGender').value = gender;
+    document.getElementById('inputDosage').value = dosage;
+    if (label) {
+        const el = document.getElementById('exampleNote');
+        if (el) el.textContent = '当前示例：' + label + '（实验条件：体重 ' + weight + 'g / ' + gender + ' / 剂量 ' + dosage + '）';
+    }
+    doPredict();
+}
+
+function doPredict() {
+    const smiles = document.getElementById('inputSmiles').value.trim();
+    if (!smiles) { showPredictError('请输入 SMILES 字符串'); return; }
+
+    const btn = document.getElementById('btnPredict');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading-spinner"></span> 预测中...';
+    clearPredict();
+
+    const payload = {
+        smiles: [smiles],
+        animal_weights: [parseFloat(document.getElementById('inputWeight').value) || 250],
+        genders: [document.getElementById('inputGender').value],
+        injection_dosages: [parseFloat(document.getElementById('inputDosage').value) || 100],
+    };
+
+    fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = !modelReady;
+        btn.innerHTML = '🔍 预测 logBBR';
+        if (data.success && data.results && data.results.length > 0) {
+            topFeatures = data.top_features || [];
+            showPredictResult(data.results[0]);
+        } else {
+            showPredictError(data.message || '预测失败');
+        }
+    })
+    .catch(err => {
+        btn.disabled = !modelReady;
+        btn.innerHTML = '🔍 预测 logBBR';
+        showPredictError('网络错误: ' + err);
+    });
+}
+
+function showPredictResult(r) {
+    const container = document.getElementById('predictResult');
+    let catClass = 'badge-mid';
+    if (r.category.includes('高')) catClass = 'badge-high';
+    else if (r.category.includes('低')) catClass = 'badge-low';
+
+    container.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:8px;">
+            <div style="text-align:center;padding:16px;background:#f9fafb;border-radius:8px;">
+                <div style="font-size:28px;font-weight:700;color:#4f46e5;">${r.pred_logBBR}</div>
+                <div style="font-size:12px;color:#6b7280;">预测 logBBR</div>
+            </div>
+            <div style="text-align:center;padding:16px;background:#f9fafb;border-radius:8px;">
+                <div style="font-size:28px;font-weight:700;color:#d97706;">${r.pred_kP}</div>
+                <div style="font-size:12px;color:#6b7280;" title="组织分配系数 Kp = 骨组织浓度 / 血液浓度的平衡比率，由亲脂性及与组织/血浆蛋白结合平衡决定，是 PBPK 模型的关键参数。此处 Kp(bone)=10^logBBR。">骨组织分配系数 Kp*</div>
+            </div>
+            <div style="text-align:center;padding:16px;background:#f9fafb;border-radius:8px;">
+                <span class="badge ${catClass}" style="font-size:18px;padding:6px 18px;">${r.category}</span>
+                <div style="font-size:12px;color:#6b7280;margin-top:6px;">骨摄取分类</div>
+            </div>
+        </div>
+        <div style="font-size:11px;color:#9ca3af;margin-top:10px;line-height:1.5;">
+            * Kp（组织分配系数）= 骨组织浓度 / 血液浓度的平衡比率，反映药物对骨组织的偏好程度，是生理药代动力学（PBPK）模型的关键参数。此处 Kp(bone) = 10^logBBR。
+        </div>
+    `;
+
+    document.getElementById('resultCard').style.display = 'block';
+    drawGaugeChart(r.pred_logBBR);
+    document.getElementById('btnContrib').disabled = false;
+
+    // 优先使用后端返回结果中的 smiles，否则回退到输入框
+    const smilesForStructure = r.smiles || document.getElementById('inputSmiles').value.trim();
+    if (smilesForStructure) {
+        loadStructure(smilesForStructure);
+    }
+}
+
+// ========== 分子结构与活性区域 ==========
+function loadStructure(smiles) {
+    document.getElementById('structureCard').style.display = 'block';
+    document.getElementById('molStructure').innerHTML = '<span class="hint">结构加载中...</span>';
+    document.getElementById('activeAtomCount').textContent = '--';
+    document.getElementById('heavyAtomCount').textContent = '--';
+    document.getElementById('activeAxes').textContent = '--';
+
+    fetch('/api/structure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smiles: smiles }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success && data.svg) {
+            // 让 RDKit 生成的 SVG 自适应容器宽度
+            let svgHtml = data.svg;
+            svgHtml = svgHtml.replace('<svg ', '<svg style="width:100%;height:auto;max-width:460px;" ');
+            document.getElementById('molStructure').innerHTML = svgHtml;
+            document.getElementById('activeAtomCount').textContent = data.n_active_atoms;
+            document.getElementById('heavyAtomCount').textContent = data.n_heavy_atoms ?? '--';
+            const axes = (data.mordred_details || []).map(d => d.feature_name);
+            document.getElementById('activeAxes').textContent =
+                axes.slice(0, 3).join('、') || '无';
+
+            renderAtomContribList(data.atom_contrib || []);
+            renderMordredSourceTable(data.mordred_details || []);
+            renderDominantFeatures(data.contrib_features || []);
+        } else {
+            document.getElementById('molStructure').innerHTML = '<div class="empty-state" style="padding:40px;"><span class="icon">⚠️</span><p>' + (data.message || '结构生成失败') + '</p></div>';
+        }
+    })
+    .catch(err => {
+        document.getElementById('molStructure').innerHTML = '<div class="empty-state" style="padding:40px;"><span class="icon">⚠️</span><p>网络错误</p></div>';
+    });
+}
+
+// 原子贡献列表：显示 元素符号+编号 / 环&芳香标记 / 来源bit / 贡献条
+function renderAtomContribList(atoms) {
+    const listEl = document.getElementById('atomContribList');
+    if (!atoms || atoms.length === 0) {
+        listEl.innerHTML = '<div class="empty-state" style="padding:30px;"><span class="icon">🔬</span><p>该分子未检测到显著活跃区域</p></div>';
+        return;
+    }
+    const maxC = Math.max(...atoms.map(a => a.contrib), 0.0001);
+    let html = '';
+    atoms.forEach(a => {
+        const pct = (a.contrib / maxC * 100).toFixed(0);
+        const bg = `rgb(255, ${Math.round(230 - a.contrib/maxC*150)}, ${Math.round(230 - a.contrib/maxC*150)})`;
+        const tags = [];
+        if (a.is_aromatic) tags.push('芳香');
+        else if (a.in_ring) tags.push('环');
+        if (a.n_hydrogens > 0) tags.push('H×' + a.n_hydrogens);
+        const tagStr = tags.length ? `<span style="font-size:10px;color:#9ca3af;">(${tags.join('，')})</span>` : '';
+        const srcStr = (a.source_descs && a.source_descs.length)
+            ? `来源维度: ${a.source_descs.slice(0,2).join(', ')}${a.source_descs.length>2?'…':''}` : '';
+        html += `<div style="padding:8px 12px;border-bottom:1px solid #f3f4f6;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-size:13px;font-weight:600;">${a.label || (a.symbol + a.atom)} ${tagStr}</span>
+                <span style="font-size:11px;color:var(--text-secondary);min-width:42px;text-align:right;">${a.contrib.toFixed(3)}</span>
+            </div>
+            <div style="height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin:5px 0 3px;">
+                <div style="height:100%;width:${pct}%;background:${bg};border-radius:4px;"></div>
+            </div>
+            <div style="font-size:10px;color:#9ca3af;">${srcStr}</div>
+        </div>`;
+    });
+    listEl.innerHTML = html;
+}
+
+// 活性区域来源溯源表：每行一个 Mordred 理化维度
+function renderMordredSourceTable(axes) {
+    const el = document.getElementById('mordredSourceTable');
+    if (!axes || axes.length === 0) {
+        el.innerHTML = '<div class="empty-state" style="padding:30px;"><span class="icon">🔬</span><p>暂无 Mordred 理化维度信息</p></div>';
+        return;
+    }
+    const maxImp = Math.max(...axes.map(d => d.importance), 1e-9);
+    const sumImp = axes.reduce((s, d) => s + d.importance, 0) || maxImp;
+    let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="background:#f9fafb;">' +
+        '<th style="padding:7px 10px;text-align:left;">Mordred 理化维度</th>' +
+        '<th style="padding:7px 10px;text-align:center;">类型</th>' +
+        '<th style="padding:7px 10px;text-align:right;">相对重要性</th>' +
+        '<th style="padding:7px 10px;text-align:left;">贡献最大原子 (编号/分解值)</th>' +
+        '</tr></thead><tbody>';
+    axes.forEach(d => {
+        const badge = d.is_selected_feature
+            ? '<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#dcfce7;color:#166534;">模型选中</span>'
+            : '<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:#fef3c7;color:#92400e;">基础维度</span>';
+        const topStr = (d.top_atoms || []).slice(0, 5)
+            .map(t => `#${t.atom}(${t.value})`).join(', ');
+        const pct = (d.importance / sumImp * 100).toFixed(0);
+        html += `<tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:7px 10px;"><code style="font-size:11px;">${d.feature_name}</code></td>
+            <td style="padding:7px 10px;text-align:center;">${badge}</td>
+            <td style="padding:7px 10px;text-align:right;">
+                <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+                    <div style="flex:1;max-width:80px;height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:#6366f1;border-radius:4px;"></div>
+                    </div>
+                    <span style="font-size:10px;color:#9ca3af;">${d.importance}</span>
+                </div>
+            </td>
+            <td style="padding:7px 10px;color:var(--text-secondary);">${topStr}</td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+// 本分子主导预测的模型特征（含 Mordred 描述符）
+function renderDominantFeatures(feats) {
+    const el = document.getElementById('dominantFeatureTable');
+    if (!feats || feats.length === 0) {
+        el.innerHTML = '<div class="empty-state" style="padding:30px;"><span class="icon">🔬</span><p>暂无数据</p></div>';
+        return;
+    }
+    const maxContrib = Math.max(...feats.map(f => f.contribution), 0.0001);
+    let html = '<table style="width:100%;font-size:12px;border-collapse:collapse;"><thead><tr style="background:#f9fafb;">' +
+        '<th style="padding:7px 10px;text-align:left;">特征名称</th>' +
+        '<th style="padding:7px 10px;text-align:center;">类型</th>' +
+        '<th style="padding:7px 10px;text-align:right;">重要性</th>' +
+        '<th style="padding:7px 10px;text-align:right;">标准化值</th>' +
+        '<th style="padding:7px 10px;text-align:left;width:120px;">综合贡献</th>' +
+        '</tr></thead><tbody>';
+    feats.forEach(f => {
+        let type = 'Mordred 描述符', tColor = '#eef2ff', tText = '#3730a3';
+        if (['is_rat','is_male','animal weight','injection'].some(k => f.name.includes(k))) { type = '实验元数据'; tColor = '#ecfdf5'; tText = '#047857'; }
+        const pct = (f.contribution / maxContrib * 100).toFixed(0);
+        html += `<tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:7px 10px;"><code style="font-size:11px;">${f.name}</code></td>
+            <td style="padding:7px 10px;text-align:center;"><span style="font-size:10px;padding:1px 6px;border-radius:3px;background:${tColor};color:${tText};">${type}</span></td>
+            <td style="padding:7px 10px;text-align:right;">${f.importance}</td>
+            <td style="padding:7px 10px;text-align:right;">${f.value}</td>
+            <td style="padding:7px 10px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <div style="flex:1;height:7px;background:#e5e7eb;border-radius:4px;overflow:hidden;">
+                        <div style="height:100%;width:${pct}%;background:#6366f1;border-radius:4px;"></div>
+                    </div>
+                    <span style="font-size:10px;color:#9ca3af;min-width:46px;text-align:right;">${f.contribution}</span>
+                </div>
+            </td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
+function showPredictError(msg) {
+    const el = document.getElementById('predictError');
+    el.style.display = 'block';
+    el.className = 'error-msg';
+    el.textContent = '❌ ' + msg;
+}
+
+function clearPredict() {
+    document.getElementById('predictResult').innerHTML = '';
+    document.getElementById('predictError').style.display = 'none';
+}
+
+// ========== 特征贡献 ==========
+function doFeatureContrib() {
+    const smiles = document.getElementById('inputSmiles').value.trim();
+    if (!smiles) return;
+
+    const btn = document.getElementById('btnContrib');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading-spinner"></span> 计算中...';
+
+    fetch('/api/feature_contrib', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smiles: smiles }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '📈 查看特征贡献';
+        if (data.success && data.features) {
+            drawContribChart(data.features);
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '📈 查看特征贡献';
+    });
+}
+
+// ========== 批量预测 ==========
+function doBatchPredict() {
+    const text = document.getElementById('batchSmiles').value.trim();
+    if (!text) { showBatchError('请输入 SMILES 列表'); return; }
+
+    // 支持每行 "SMILES [体重] [性别] [剂量] [真实logBBR]" 的可选格式（空格/逗号/制表符分隔）
+    const lines = text.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+    const smilesList = [];
+    const weightList = [];
+    const genderList = [];
+    const dosageList = [];
+    const trueList = [];
+    let hasTrue = false;
+    lines.forEach(line => {
+        const parts = line.split(/[,;\t ]+/).map(p => p.trim()).filter(p => p.length > 0);
+        smilesList.push(parts[0]);
+        // parts[1]=体重, [2]=性别, [3]=剂量, 最后一列若为数字则视为真实logBBR
+        const nums = parts.slice(1).filter(p => !isNaN(parseFloat(p)));
+        const lastNum = parts[parts.length - 1];
+        if (!isNaN(parseFloat(lastNum))) {
+            trueList.push(parseFloat(lastNum));
+            hasTrue = true;
+        } else {
+            trueList.push(null);
+        }
+        // 体重/剂量：取该行中的数字（跳过最后一列真实值）
+        const numeric = parts.slice(1, parts.length - (hasTrue ? 1 : 0)).filter(p => !isNaN(parseFloat(p)));
+        weightList.push(parseFloat(numeric[0]) || 250);
+        dosageList.push(parseFloat(numeric[numeric.length - 1]) || 100);
+        const g = parts.find(p => p.toLowerCase() === 'male' || p.toLowerCase() === 'female');
+        genderList.push(g || 'male');
+    });
+    if (smilesList.length === 0) { showBatchError('无有效 SMILES'); return; }
+
+    const btn = document.getElementById('btnBatchPredict');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading-spinner"></span> 预测中...';
+    clearBatch();
+
+    const payload = {
+        smiles: smilesList,
+        animal_weights: weightList,
+        genders: genderList,
+        injection_dosages: dosageList,
+    };
+    if (hasTrue) {
+        payload.true_logbbr = trueList;
+    }
+
+    fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.innerHTML = '📊 批量预测';
+        if (data.success && data.results) {
+            showBatchResult(data.results, data.metrics || {}, trueList);
+        } else {
+            showBatchError(data.message || '预测失败');
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.innerHTML = '📊 批量预测';
+        showBatchError('网络错误: ' + err);
+    });
+}
+
+function showBatchResult(results, metrics, trueList) {
+    const hasTrue = Array.isArray(trueList) && trueList.some(v => v !== null && v !== undefined);
+    const container = document.getElementById('batchResult');
+    let html = '<div class="table-container"><table><thead><tr>';
+    html += '<th>#</th><th>SMILES</th><th>预测 logBBR</th>' + (hasTrue ? '<th>实测 logBBR</th><th>Δ</th>' : '') + '<th title="骨组织分配系数 Kp(bone)=10^logBBR，即骨/血浓度平衡比（PBPK 关键参数）">Kp*</th><th>分类</th></tr></thead><tbody>';
+    results.forEach((r, i) => {
+        let catClass = 'badge-mid';
+        if (r.category.includes('高')) catClass = 'badge-high';
+        else if (r.category.includes('低')) catClass = 'badge-low';
+        const tv = (hasTrue && trueList[i] !== null && trueList[i] !== undefined) ? trueList[i] : null;
+        const delta = tv !== null ? (r.pred_logBBR - tv).toFixed(2) : null;
+        html += `<tr>
+            <td>${i+1}</td>
+            <td><span class="smiles-code" title="${r.smiles}">${r.smiles}</span></td>
+            <td style="font-weight:600;">${r.pred_logBBR}</td>
+            ${hasTrue ? `<td>${tv !== null ? tv : '—'}</td><td>${delta !== null ? delta : '—'}</td>` : ''}
+            <td>${r.pred_kP}</td>
+            <td><span class="badge ${catClass}">${r.category}</span></td>
+        </tr>`;
+    });
+    html += '</tbody></table></div>';
+
+    // 若提供了真实值，显示 Spearman ρ 等指标（结果已按 logBBR 降序排列）
+    if (metrics && metrics.spearman !== undefined && metrics.n > 0) {
+        html += `<div style="margin-top:14px;display:flex;gap:16px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;padding:14px 18px;background:#eef2ff;border-radius:8px;border-left:4px solid #4f46e5;">
+                <div style="font-size:22px;font-weight:700;color:#4f46e5;">ρ = ${metrics.spearman}</div>
+                <div style="font-size:12px;color:#6b7280;">Spearman 秩相关系数</div>
+            </div>
+            <div style="flex:1;min-width:200px;padding:14px 18px;background:#ecfdf5;border-radius:8px;border-left:4px solid #10b981;">
+                <div style="font-size:22px;font-weight:700;color:#059669;">r = ${metrics.pearson}</div>
+                <div style="font-size:12px;color:#6b7280;">Pearson 相关系数</div>
+            </div>
+        </div>
+        <div style="font-size:12px;color:#6b7280;margin-top:6px;">基于 ${metrics.n} 个带真实 logBBR 的样本计算（预测结果已按 logBBR 从大到小排序）</div>`;
+    } else {
+        html += `<div style="font-size:12px;color:#6b7280;margin-top:10px;">预测结果已按预测 logBBR 从大到小排序。如需 Spearman ρ，可在批量输入中附带真实 logBBR 列（见下方说明）。</div>`;
+    }
+
+    html += `<button class="btn btn-outline btn-sm" style="margin-top:12px;" onclick="downloadCSV(${JSON.stringify(results).replace(/"/g, '&quot;')})">📥 导出 CSV</button>`;
+    html += `<div style="font-size:11px;color:#9ca3af;margin-top:10px;line-height:1.5;">
+        * Kp（组织分配系数）= 药物在骨组织中的浓度与其在血液中浓度的平衡比率，反映药物对骨组织的偏好程度，主要由亲脂性及与组织成分/血浆蛋白结合平衡决定，是生理药代动力学（PBPK）模型的关键参数。此处 Kp(bone) = 10^logBBR。
+    </div>`;
+    container.innerHTML = html;
+}
+
+function downloadCSV(results) {
+    let csv = 'Index,SMILES,pred_logBBR,pred_kP,Category\n';
+    results.forEach((r, i) => {
+        csv += `${i+1},"${r.smiles}",${r.pred_logBBR},${r.pred_kP},"${r.category}"\n`;
+    });
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'logBBR_predictions.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function showBatchError(msg) {
+    const el = document.getElementById('batchError');
+    el.style.display = 'block';
+    el.className = 'error-msg';
+    el.textContent = '❌ ' + msg;
+}
+
+function clearBatch() {
+    document.getElementById('batchResult').innerHTML = '';
+    document.getElementById('batchError').style.display = 'none';
+}
+
+// ========== 图表 ==========
+function drawGaugeChart(value) {
+    const ctx = document.getElementById('chartGauge').getContext('2d');
+    if (chartGaugeInst) chartGaugeInst.destroy();
+
+    // 用半环形图模拟 gauge
+    const clamped = Math.max(-1, Math.min(2, value));
+    const percentage = (clamped + 1) / 3; // 映射 -1~2 到 0~1
+    const colors = ['#ef4444', '#f59e0b', '#10b981'];
+    let color = colors[1];
+    if (value > 0) color = colors[2];
+    else if (value < -0.1) color = colors[0];
+
+    chartGaugeInst = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [percentage, 1 - percentage],
+                backgroundColor: [color, '#e5e7eb'],
+                borderWidth: 0,
+                circumference: 270,
+                rotation: 225,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '75%',
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false },
+            },
+        },
+        plugins: [{
+            id: 'centerText',
+            afterDraw(chart) {
+                const { ctx, chartArea: { width, height, top, left } } = chart;
+                ctx.save();
+                ctx.font = 'bold 32px -apple-system, sans-serif';
+                ctx.fillStyle = color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(value.toFixed(3), left + width/2, top + height/2 - 8);
+                ctx.font = '13px -apple-system, sans-serif';
+                ctx.fillStyle = '#6b7280';
+                ctx.fillText('logBBR', left + width/2, top + height/2 + 22);
+                ctx.restore();
+            }
+        }]
+    });
+}
+
+function drawContribChart(features) {
+    const ctx = document.getElementById('chartContrib').getContext('2d');
+    if (chartContribInst) chartContribInst.destroy();
+
+    const labels = features.map(f => f.name).reverse();
+    const data = features.map(f => f.contribution).reverse();
+    const vals = features.map(f => f.value).reverse();
+
+    chartContribInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '特征贡献度 (importance × |value|)',
+                data: data,
+                backgroundColor: vals.map(v => v >= 0 ? 'rgba(79,70,229,0.7)' : 'rgba(239,68,68,0.5)'),
+                borderColor: vals.map(v => v >= 0 ? '#4f46e5' : '#ef4444'),
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: 'Top 15 特征贡献', font: { size: 14 } },
+            },
+            scales: {
+                x: { title: { display: true, text: '贡献度' } },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        callback: function(v) { return v.length > 28 ? v.substr(0,25)+'...' : v; }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function drawFeatImpChart(features) {
+    const ctx = document.getElementById('chartFeatImp').getContext('2d');
+    if (chartFeatImpInst) chartFeatImpInst.destroy();
+
+    const labels = features.map(f => f.name).reverse();
+    const data = features.map(f => f.importance).reverse();
+
+    chartFeatImpInst = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '特征重要性',
+                data: data,
+                backgroundColor: 'rgba(79,70,229,0.6)',
+                borderColor: '#4f46e5',
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: { display: true, text: '模型 Top 10 特征重要性', font: { size: 14 } },
+            },
+            scales: {
+                x: { title: { display: true, text: 'Importance' } },
+                y: {
+                    ticks: {
+                        font: { size: 10 },
+                        callback: function(v) { return v.length > 28 ? v.substr(0,25)+'...' : v; }
+                    }
+                }
+            }
+        }
+    });
+
+    // 更新右侧特征列表
+    const listEl = document.getElementById('featureList');
+    const maxImp = Math.max(...data, 1);
+    let html = '';
+    features.forEach((f, i) => {
+        const pct = (f.importance / maxImp * 100).toFixed(0);
+        html += `<div class="feature-item">
+            <span class="feature-name" title="${f.name}">${f.name}</span>
+            <div class="feature-bar"><div class="feature-bar-fill" style="width:${pct}%;"></div></div>
+            <span class="feature-imp">${f.importance.toFixed(4)}</span>
+        </div>`;
+    });
+    listEl.innerHTML = html;
+}
+
+// ========== Tab 切换 ==========
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.tab-btn[onclick*="${tabName}"]`).classList.add('active');
+    document.getElementById('tab-' + tabName).classList.add('active');
+
+    // 切换到 features tab 时加载特征重要性
+    if (tabName === 'features' && modelReady) {
+        loadFeatureImportance();
+    }
+}
+
+function loadFeatureImportance() {
+    fetch('/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smiles: ['O=C(O)c1ccc(F)cc1'] }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success && data.top_features) {
+            drawFeatImpChart(data.top_features);
+        }
+    });
+}
+
+</script>
+</body>
+</html>
