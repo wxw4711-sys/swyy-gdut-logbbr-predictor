@@ -52,15 +52,26 @@ git push
 2. 用户名建议填 `swyygdutlogbbr`（决定域名），邮箱、密码填好提交。
 3. 登录后进入 Dashboard。
 
-## 步骤 2：把代码放进 PythonAnywhere（二选一）
+## 步骤 2：清空旧文件并从 GitHub 重新拉取（全新重装）
 
-### 方式 A（推荐，最简单）：从 GitHub 克隆
-1. Dashboard 顶部点 **Consoles** → **Bash**（启动一个命令行）。
-2. 执行：
-   ```bash
-   git clone https://github.com/wxw4711-sys/swyy-gdut-logbbr-predictor.git
-   ```
-   这会在你的家目录生成 `swyy-gdut-logbbr-predictor/` 文件夹（含**步骤 0 重新生成的**模型 bundle）。
+> 若是第一台部署可跳过“清空”两步；若要从头重来，先彻底删掉旧项目与用户站点包。
+
+在 **Consoles → Bash** 中：
+
+```bash
+# 1) 先到 Web 页签把应用 Delete 掉（或最后再 Reload）
+# 2) 彻底清空：旧项目目录 + 用户站点包（含旧 rdkit/scipy/sklearn 残留）+ pip 缓存
+rm -rf ~/swyy-gdut-logbbr-predictor
+rm -rf ~/.local
+rm -rf ~/.cache/pip
+
+# 3) 从 GitHub 重新克隆（含已训练好的精简模型 bundle）
+cd ~
+git clone https://github.com/wxw4711-sys/swyy-gdut-logbbr-predictor.git
+# 生成 ~/swyy-gdut-logbbr-predictor/，代码在 web_app/ 子目录
+```
+
+### 方式 B：上传 ZIP
 
 ### 方式 B：上传 ZIP
 1. 在本机把 `web_app/` 文件夹压缩成 `web_app.zip`。
@@ -70,36 +81,31 @@ git push
    unzip web_app.zip -d swyy-gdut-logbbr-predictor
    ```
 
-## 步骤 3：安装依赖（免费版关键：只装 numpy + pandas，绝不装 scipy/sklearn）
-> **重要更正**：PythonAnywhere 免费版系统 Python 3.8 **并不自带** numpy/scipy/pandas/sklearn（实测缺失）。
-> 但 `scipy`/`scikit-learn` 各自约 200MB，**装了必超 512MB**。
-> 本仓库的预测接口已改为**只依赖 `numpy + pandas`**（不再依赖 scipy/sklearn），
-> 所以只需把 `rdkit/mordred/lightgbm` 等重包（已装进 `~/.local`）和 `numpy/pandas` 凑齐即可。
->
-> 你之前已经把 `rdkit-pypi`/`mordred`/`lightgbm`/`joblib`/`six`/`networkx`/`flask` 装进了 `~/.local`（约 303MB），
-> **不要 `rm -rf ~/.local`**，只需在其上补装 `numpy` + `pandas`。
+## 步骤 3：安装依赖（免费版关键：用精简 requirements，绝不装 scipy/sklearn）
+> **核心原则**：本仓库预测接口**只依赖 `numpy + pandas` + 已打包的 `rdkit/mordred/lightgbm`**，
+> 而 `web_app/requirements.txt` 已去掉 `scipy`/`scikit-learn`（各约 200MB，装了必超 512MB）。
+> 完整部署集 = `rdkit-pypi` + `mordred` + `lightgbm` + `flask` + `joblib` + `numpy` + `pandas` + `six` + `networkx`，
+> 总计约 **230MB**，稳稳塞进 512MB。
 
-在 **Consoles → Bash** 中：
+在 **Consoles → Bash** 中（项目已克隆到 `~/swyy-gdut-logbbr-predictor`）：
+
 ```bash
 cd ~/swyy-gdut-logbbr-predictor
-git pull                       # 拉取步骤 0 的新 bundle 与新 flask_server.py
-
-# 只装预测必需的 numpy + pandas（pip 会自动带上 python-dateutil/pytz 等小依赖，不会拉 scipy）
-pip3.8 install --user --no-cache-dir numpy pandas
+# 全量安装预测所需全部依赖（不建 venv，装到用户目录；--no-cache-dir 省空间）
+pip3.8 install --user --no-cache-dir -r web_app/requirements.txt
 ```
 
 安装完成后**务必验证**（免费版最容易卡在这里）：
+
 ```bash
-python3.8 -c "import rdkit, mordred, lightgbm, flask, numpy, pandas; print('OK', mordred.__version__)"
+python3.8 -c "import rdkit, mordred, lightgbm, flask, numpy, pandas, joblib; print('OK', mordred.__version__)"
+python3.8 -c "import joblib; b=joblib.load('web_app/result/logbbr_predictor_bundle.joblib'); print('bundle OK', type(b['model']).__name__, 'best_iter', b.get('best_iteration'))"
 ```
-- 若打印 `OK 1.2.0` → 全部就绪，继续步骤 4–6。
-- 若报 `Disk quota exceeded`：多半之前 `python3.11` 的残留没清掉，先 `du -sh ~` 看占用；若 `~/.local` 异常大，
-  执行 `rm -rf ~/.local` 后**重装全部**（注意这会清掉已装的 rdkit 等）：
-  ```bash
-  rm -rf ~/.local
-  pip3.8 install --user --no-cache-dir "rdkit-pypi==2021.9.1" "mordred==1.2.0" lightgbm joblib six "networkx==2.8.8" flask
-  pip3.8 install --user --no-cache-dir numpy pandas
-  ```
+
+- 第一行打印 `OK 1.2.0` → 依赖就绪。
+- 第二行打印 `bundle OK Booster ...` → 模型可加载（确认是精简 `lightgbm.Booster` 格式，无 sklearn/scipy 依赖）。
+- 若报 `Disk quota exceeded`：先 `du -sh ~` 看占用；多半是旧 `python3.11` 或 `~/.local` 残留过大，
+  执行 `rm -rf ~/.local ~/.cache/pip` 后重跑上面的 `pip install -r web_app/requirements.txt`。
 - 若 `mordred` 导入报 rdkit 相关错（极少）：把 `rdkit-pypi==2021.9.1` 换成 `rdkit-pypi==2020.9.5.2` 重试。
 
 ## 步骤 4：创建 Web 应用
@@ -108,7 +114,7 @@ python3.8 -c "import rdkit, mordred, lightgbm, flask, numpy, pandas; print('OK',
 3. Python 版本选 **Python 3.8**（本仓库依赖 `mordred==1.2.0` 适配 3.8，不要用 3.11，否则与命令里的 `python3.8` 不一致）。
 4. 在 **Code** 区域：
    - **Virtualenv**：**留空**（使用系统 Python 3.8，配合步骤 3 的 `--user` 安装）。
-   - **Source code**：填 `/home/你的用户名/swyy-gdut-logbbr-predictor`
+   - **Source code**：填 `/home/你的用户名/swyy-gdut-logbbr-predictor/web_app`
    - **Working directory**（如有）：同上
 5. 点 **WSGI configuration file** 的链接（形如 `/var/www/你的用户名_pythonanywhere_com_wsgi.py`），
    把里面的内容**全部替换**为仓库里 `wsgi.py` 的内容，并把 `YOUR_USERNAME` 改成你的用户名，保存。
