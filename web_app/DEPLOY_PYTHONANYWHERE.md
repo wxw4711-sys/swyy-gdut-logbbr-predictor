@@ -81,18 +81,26 @@ git clone https://github.com/wxw4711-sys/swyy-gdut-logbbr-predictor.git
    unzip web_app.zip -d swyy-gdut-logbbr-predictor
    ```
 
-## 步骤 3：安装依赖（免费版关键：用精简 requirements，绝不装 scipy/sklearn）
-> **核心原则**：本仓库预测接口**只依赖 `numpy + pandas` + 已打包的 `rdkit/mordred/lightgbm`**，
-> 而 `web_app/requirements.txt` 已去掉 `scipy`/`scikit-learn`（各约 200MB，装了必超 512MB）。
-> 完整部署集 = `rdkit-pypi` + `mordred` + `lightgbm` + `flask` + `joblib` + `numpy` + `pandas` + `six` + `networkx`，
-> 总计约 **230MB**，稳稳塞进 512MB。
+## 步骤 3：安装依赖（免费版关键：绝不装真实 scipy，用轻量桩代替）
+> **核心原则**：本仓库预测接口**只依赖 `numpy + pandas` + 已打包的 `rdkit/mordred/lightgbm`**。
+> 但 **`lightgbm` 在导入时强制 `import scipy.sparse`**（其元数据把 scipy 列为硬依赖），
+> 若用 `pip install -r requirements.txt` 会把 scipy（~190MB）一起拉进来，
+> 叠加 rdkit（~163MB）必超 512MB 配额。
+>
+> **解决**：lightgbm 只在处理 *稀疏输入* 时才真正用到 scipy；本应用预测只喂稠密 numpy，
+> 所以服务器**不装真实 scipy**，改用 `make_scipy_stub.py` 写入一个 ~1KB 的 scipy 桩即可。
+> 整套依赖约 **250MB**，稳稳塞进 512MB。
 
 在 **Consoles → Bash** 中（项目已克隆到 `~/swyy-gdut-logbbr-predictor`）：
 
 ```bash
 cd ~/swyy-gdut-logbbr-predictor
-# 全量安装预测所需全部依赖（不建 venv，装到用户目录；--no-cache-dir 省空间）
-pip3.8 install --user --no-cache-dir -r web_app/requirements.txt
+# 1) 除 lightgbm 外，正常安装其余依赖（都不含 scipy）
+pip3.8 install --user --no-cache-dir numpy pandas joblib flask "rdkit-pypi==2021.9.1" "mordred==1.2.0" six "networkx==2.8.8"
+# 2) lightgbm 用 --no-deps 单独装，阻止 pip 拉入 scipy
+pip3.8 install --user --no-cache-dir --no-deps "lightgbm==4.6.0"
+# 3) 写入极小 scipy 桩，使 import lightgbm 通过（预测不触发 scipy）
+python3.8 web_app/make_scipy_stub.py
 ```
 
 安装完成后**务必验证**（免费版最容易卡在这里）：
@@ -103,9 +111,11 @@ python3.8 -c "import joblib; b=joblib.load('web_app/result/logbbr_predictor_bund
 ```
 
 - 第一行打印 `OK 1.2.0` → 依赖就绪。
-- 第二行打印 `bundle OK Booster ...` → 模型可加载（确认是精简 `lightgbm.Booster` 格式，无 sklearn/scipy 依赖）。
+- 第二行打印 `bundle OK Booster ...` → 模型可加载（确认是精简 `lightgbm.Booster` 格式）。
+- 若 `make_scipy_stub.py` 自检报 `import lightgbm` 失败：说明 lightgbm 版本变化导致桩缺名字，
+  把报错里缺的属性补进 `web_app/make_scipy_stub.py` 的桩，再重跑该脚本即可。
 - 若报 `Disk quota exceeded`：先 `du -sh ~` 看占用；多半是旧 `python3.11` 或 `~/.local` 残留过大，
-  执行 `rm -rf ~/.local ~/.cache/pip` 后重跑上面的 `pip install -r web_app/requirements.txt`。
+  执行 `rm -rf ~/.local ~/.cache/pip` 后重跑上面 1)–3)。
 - 若 `mordred` 导入报 rdkit 相关错（极少）：把 `rdkit-pypi==2021.9.1` 换成 `rdkit-pypi==2020.9.5.2` 重试。
 
 ## 步骤 4：创建 Web 应用
