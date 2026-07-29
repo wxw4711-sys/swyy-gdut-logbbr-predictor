@@ -1,8 +1,19 @@
 # ============================================================
-# PythonAnywhere 免费版【预测接口】运行时依赖（已精简）
-# 适配 Python 3.8 + mordred==1.2.0（纯 Python，不依赖 numba，
-# 也不会被 pip 拉第二份 rdkit）。整套占用户目录约 330MB，可塞进 512MB。
-# 关键点：预测接口【不依赖】scipy / scikit-learn（见 flask_server.py）。
+# 依赖说明（重要）
+# ------------------------------------------------------------
+# 【本地训练 / 完整环境】直接用本文件即可：
+#     pip install -r requirements.txt
+# 它会装齐 rdkit / mordred / lightgbm / flask / numpy / pandas / joblib 等，
+# lightgbm 声明的 scipy 依赖也会被一并装上（本地磁盘充裕，无妨）。
+#
+# 【PythonAnywhere 免费版部署】千万不要 `pip install -r requirements.txt`！
+# 因为 lightgbm 把 scipy 列为硬依赖，pip 会自动拉入 scipy（~190MB），
+# 加上 rdkit（~163MB）必超 512MB 配额。
+# 正确做法见 DEPLOY_PYTHONANYWHERE.md「步骤 3」：
+#   1) 除 lightgbm 外逐个安装（不含 scipy）
+#   2) lightgbm 用 `pip install --no-deps lightgbm` 单独装，避免拉 scipy
+#   3) 运行 `python3.8 web_app/make_scipy_stub.py` 写入极小 scipy 桩
+#      （预测只用稠密 numpy，永不真正调用 scipy，故桩足够）
 # ============================================================
 
 flask>=2.0
@@ -16,8 +27,7 @@ six                  # mordred 依赖
 networkx==2.8.8      # mordred 1.2.0 兼容的 networkx 2.x
 
 # ============================================================
-# 以下【仅本地重新训练模型时需要】，服务器预测接口不需要，
-# 因此部署时不要安装（装了会超 512MB）：
+# 以下【仅本地重新训练模型时需要】，服务器预测接口不需要：
 #   scikit-learn>=1.0
 #   scipy>=1.7
 #   optuna>=3.0
