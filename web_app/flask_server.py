@@ -507,14 +507,30 @@ def get_status():
         load_bundle()
     if bundle:
         report = bundle.get("training_report", {})
+        # 兼容两种 report 结构：训练脚本生成的扁平结构，与 notebook 生成的嵌套结构
+        def _get(path, default=None):
+            cur = report
+            for k in path.split("."):
+                if isinstance(cur, dict) and k in cur:
+                    cur = cur[k]
+                else:
+                    return default
+            return cur
         info["metrics"] = {
-            "test_r2": report.get("test_r2"),
-            "test_rmse": report.get("test_rmse"),
-            "test_mae": report.get("test_mae"),
-            "cv_r2_mean": report.get("cv_r2_mean"),
+            "test_r2": report.get("test_r2", _get("final_results.test.r2")),
+            "validation_r2": report.get("validation_r2", _get("final_results.validation.r2")),
+            "test_rmse": report.get("test_rmse", _get("final_results.test.rmse")),
+            "test_mae": report.get("test_mae", _get("final_results.test.mae")),
+            "cv_r2_mean": report.get("cv_r2_mean", _get("cross_validation.r2")),
             "cv_r2_std": report.get("cv_r2_std"),
-            "n_features": report.get("n_features"),
-            "n_samples": report.get("n_samples"),
+            "spearman_test": report.get("spearman_test", _get("final_results.test.spearman")),
+            "n_features": report.get("n_features", _get("experiment_info.n_features")),
+            "n_samples": report.get("n_samples", _get("experiment_info.n_samples_original")),
+            "n_samples_original": report.get("n_samples_original", _get("experiment_info.n_samples_original")),
+            "n_samples_balanced": report.get("n_samples_balanced", _get("experiment_info.n_samples_balanced")),
+            "balancing_method": report.get("balancing_method", _get("experiment_info.balancing_method")),
+            "split": report.get("split", _get("experiment_info.split")),
+            "model": report.get("model_type") or _get("experiment_info.model"),
         }
         info["selected_features"] = bundle.get("selected_features_readable", [])
     return jsonify(info)
@@ -636,9 +652,14 @@ def predict():
                 y_pred = np.array([r["pred_logBBR"] for r in results], dtype=float)
                 if len(y_true) == len(y_pred) and len(y_true) > 1:
                     rho, pr = _correlations(y_true, y_pred)
+                    # 用 numpy 计算，避免引入 sklearn 依赖（部署环境精简）
+                    rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
+                    mae = float(np.mean(np.abs(y_true - y_pred)))
                     metrics = {
                         "spearman": round(float(rho), 4),
                         "pearson": round(float(pr), 4),
+                        "rmse": round(rmse, 4),
+                        "mae": round(mae, 4),
                         "n": int(len(y_true)),
                     }
             except Exception:
