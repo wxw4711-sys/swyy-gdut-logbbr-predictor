@@ -442,7 +442,7 @@
     <!-- Header -->
     <div class="header">
         <h1>🦴 药物骨骼分布预测系统（logBBR）</h1>
-        <p>预测药物在骨骼中的分布 / 沉积倾向 · 基于 LightGBM 的 QSAR 模型 · 尤其适用于含 ¹⁸F 等放射性核素的 PET 药物</p>
+        <p>预测药物在骨骼中的分布 / 沉积倾向 · 基于 LightGBM 的 QSAR 模型 · 适用于含 ¹⁸F 等放射性核素的 PET 药物</p>
     </div>
 
     <!-- 目的与 logBBR 定义 -->
@@ -682,7 +682,7 @@
                     <li><b>放射剂量</b>：注射剂量以 <b>mCi</b>（毫居里）记录，符合 PET 药物的放射剂量单位。</li>
                 </ul>
                 <div class="data-quality">
-                    <strong>为何模型可信？</strong> 训练数据来自标准化、可追溯的动物 PET/CT 实验，统一在 60 min 时间窗与 %ID/g 量纲下采集，排除了采集条件不一致带来的噪声。基于这批<strong>高质量、标准化</strong>的数据训练的模型，其预测结果同样具备较高的可靠性与可重复性，可用于药物骨分布的初步筛选与排序。
+                    训练数据来自标准化、可追溯的动物 PET/CT 实验，统一在 60 min 时间窗与 %ID/g 量纲下采集，排除了采集条件不一致带来的噪声。基于这批<strong>高质量、标准化</strong>的数据训练的模型，其预测结果同样具备较高的可靠性与可重复性，可用于药物骨分布的初步筛选与排序。
                 </div>
             </div>
         </div>
@@ -776,6 +776,10 @@ function updateStatusUI(data) {
     // 更新特征列表
     if (data.selected_features && data.selected_features.length > 0) {
         updateFeatureList(data.selected_features);
+    }
+    // 预填充特征重要性（避免特征页初始显示“模型未训练”）
+    if (data.top_features && data.top_features.length > 0) {
+        drawFeatImpChart(data.top_features);
     }
 }
 
