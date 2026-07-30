@@ -547,7 +547,29 @@ def get_status():
             "split": report.get("split", _get("experiment_info.split")),
             "model": report.get("model_type") or _get("experiment_info.model"),
         }
-        info["selected_features"] = bundle.get("selected_features_readable", [])
+        # 派生选中特征（bundle 仅存 selected_indices + full_feature_columns + feature_name_map）
+        sel_idx = bundle.get("selected_indices")
+        feat_cols = bundle.get("full_feature_columns")
+        name_map = bundle.get("feature_name_map") or {}
+        if sel_idx is not None and feat_cols is not None:
+            sel_cols = [feat_cols[i] for i in sel_idx]
+            info["selected_features"] = [name_map.get(c, c) for c in sel_cols]
+            # 派生 Top10 特征重要性（与 /api/predict 逻辑一致）
+            try:
+                _m = bundle.get("model")
+                if _m is not None:
+                    _imp = _model_importances(_m)
+                    if _imp is not None and len(_imp) == len(sel_cols):
+                        _order = np.argsort(_imp)[::-1][:10]
+                        info["top_features"] = [
+                            {"name": name_map.get(sel_cols[j], sel_cols[j]),
+                             "importance": round(float(_imp[j]), 6)}
+                            for j in _order
+                        ]
+            except Exception:
+                pass
+        else:
+            info["selected_features"] = bundle.get("selected_features_readable", [])
     return jsonify(info)
 
 
