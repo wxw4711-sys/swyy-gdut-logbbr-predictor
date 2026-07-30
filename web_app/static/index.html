@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>logBBR 骨血比预测系统 - LightGBM QSAR Model</title>
+    <title>药物骨骼分布预测系统 (logBBR) - LightGBM QSAR 模型</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
@@ -408,14 +408,61 @@
             animation: spin 0.8s linear infinite;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 目的与定义 */
+        .purpose-card { border-left: 4px solid var(--primary); }
+        .purpose-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+        .purpose-item { background: #f9fafb; border-radius: var(--radius-sm); padding: 16px; border: 1px solid var(--border); }
+        .purpose-h { font-size: 14px; font-weight: 700; color: var(--primary); margin-bottom: 8px; }
+        .purpose-item p { font-size: 13px; color: var(--text); line-height: 1.7; }
+        .formula { margin-top: 10px; padding: 10px 12px; background: #eef2ff; border-radius: 8px; text-align: center; font-size: 15px; font-weight: 600; color: var(--primary); }
+        .req { color: var(--danger); }
+        /* 快速填充按钮 */
+        .quick-fill { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+        .chip-btn { font-size: 12px; padding: 6px 12px; border: 1px solid var(--primary); background: white; color: var(--primary); border-radius: 16px; cursor: pointer; transition: all .15s; }
+        .chip-btn:hover { background: var(--primary); color: white; }
+        /* Gauge 可视化 */
+        .gauge-block { text-align: center; }
+        .gauge-canvas-wrap { position: relative; height: 240px; max-width: 360px; margin: 0 auto; }
+        .gauge-scale { display: flex; justify-content: space-between; max-width: 360px; margin: 8px auto 0; font-size: 12px; color: var(--text-secondary); }
+        .gauge-note { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.6; max-width: 480px; margin-left: auto; margin-right: auto; }
+        .contrib-box { border-top: 1px dashed var(--border); padding-top: 16px; }
+        .contrib-box-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+        .contrib-note { font-size: 12px; color: var(--text-secondary); background: #fffbeb; border-left: 3px solid #f59e0b; padding: 8px 12px; border-radius: 4px; margin-bottom: 12px; line-height: 1.6; }
+        .contrib-canvas-wrap { position: relative; height: 320px; }
+        /* 数据来源 */
+        .data-section h4 { font-size: 15px; margin-bottom: 10px; color: var(--text); }
+        .data-section ul { margin: 0 0 12px 20px; padding: 0; }
+        .data-section li { font-size: 13px; color: var(--text); line-height: 1.8; margin-bottom: 4px; }
+        .data-quality { font-size: 13px; color: var(--text); line-height: 1.8; background: #f0fdf4; border-left: 4px solid #10b981; padding: 12px 16px; border-radius: 6px; }
     </style>
 </head>
 <body>
 <div class="container">
     <!-- Header -->
     <div class="header">
-        <h1>🔬 logBBR 骨血比预测系统</h1>
-        <p>基于 LightGBM 的 QSAR 模型 | Mordred + Morgan + Metadata 多模态特征 | 18F 平衡 | 8:1:1 分层划分</p>
+        <h1>🦴 药物骨骼分布预测系统（logBBR）</h1>
+        <p>预测药物在骨骼中的分布 / 沉积倾向 · 基于 LightGBM 的 QSAR 模型 · 尤其适用于含 ¹⁸F 等放射性核素的 PET 药物</p>
+    </div>
+
+    <!-- 目的与 logBBR 定义 -->
+    <div class="card purpose-card">
+        <div class="card-title"><span class="icon">🎯</span> 预测目的与 logBBR 定义</div>
+        <div class="purpose-grid">
+            <div class="purpose-item">
+                <div class="purpose-h">预测目的</div>
+                <p>输入药物 SMILES，预测其在<strong>骨骼中的分布 / 沉积倾向（骨摄取）</strong>，用于早期评估药物是否会富集于骨组织，辅助 PET 示踪剂、骨靶向药物的研发与安全性评价。</p>
+            </div>
+            <div class="purpose-item">
+                <div class="purpose-h">logBBR 定义</div>
+                <p>logBBR = log₁₀(<strong>BBR</strong>)，其中 <strong>BBR = C<sub>骨</sub> / C<sub>血</sub></strong>（骨组织与血液的放射性浓度比）。本模型基于小动物 PET/CT 在给药后 <strong>60 min</strong> 的标准化定量（%ID/g）。</p>
+                <div class="formula">logBBR = log₁₀( C<sub>骨</sub> ⁄ C<sub>血</sub> )</div>
+            </div>
+            <div class="purpose-item">
+                <div class="purpose-h">如何得到骨浓度</div>
+                <p>由预测值可得 <strong>BBR = 10<sup>logBBR</sup></strong>，进而 <strong>C<sub>骨</sub> = BBR × C<sub>血</sub></strong>。对含 ¹⁸F 的 PET 药物，结合 PET/CT 定量即可估算骨骼 %ID/g，<strong>放射剂量以 mCi 计</strong>。</p>
+            </div>
+        </div>
     </div>
 
     <!-- Status Bar -->
@@ -459,6 +506,7 @@
         <button class="tab-btn active" onclick="switchTab('predict')">🔮 单分子预测</button>
         <button class="tab-btn" onclick="switchTab('batch')">📊 批量预测</button>
         <button class="tab-btn" onclick="switchTab('features')">🧬 特征重要性</button>
+        <button class="tab-btn" onclick="switchTab('data')">📚 数据与模型</button>
     </div>
 
     <!-- Tab 1: Single Prediction -->
@@ -481,21 +529,18 @@
             <div id="exampleNote" style="font-size:11px;color:#9ca3af;margin-top:6px;min-height:14px;"></div>
             <div class="form-row" style="margin-top:12px;">
                 <div class="form-group">
-                    <label>动物体重 (g)</label>
-                    <input type="number" id="inputWeight" value="250" step="1">
-                    <span class="hint">>100 视为大鼠 (rat)</span>
+                    <label>动物体重 (g) <span class="req">*</span></label>
+                    <div class="quick-fill">
+                        <button type="button" class="chip-btn" onclick="setWeight(25)">🐭 小鼠 (~25 g)</button>
+                        <button type="button" class="chip-btn" onclick="setWeight(250)">🐀 大鼠 (~250 g)</button>
+                    </div>
+                    <input type="number" id="inputWeight" value="250" step="1" min="1">
+                    <span class="hint">点击上方按钮快速填充；也可手动输入（&gt;100 视为大鼠 rat）。</span>
                 </div>
                 <div class="form-group">
-                    <label>性别</label>
-                    <select id="inputGender">
-                        <option value="male">Male (雄性)</option>
-                        <option value="female">Female (雌性)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>注射剂量</label>
-                    <input type="number" id="inputDosage" value="100" step="0.1">
-                    <span class="hint">上限 500</span>
+                    <label>注射剂量 (mCi) <span class="req">*</span></label>
+                    <input type="number" id="inputDosage" value="100" step="0.1" min="0">
+                    <span class="hint">PET 药物<strong>放射剂量</strong>（毫居里 mCi），训练集单位为 mCi；范围 0–500（超出截断）。该元数据对 logBBR 影响很小，主要用于结合血药浓度换算绝对骨浓度。</span>
                 </div>
             </div>
             <div class="btn-group">
@@ -503,7 +548,7 @@
                     🔍 预测 logBBR
                 </button>
                 <button class="btn btn-outline" id="btnContrib" onclick="doFeatureContrib()" disabled>
-                    📈 查看特征贡献
+                    📈 本分子特征贡献（个体）
                 </button>
             </div>
             <div id="predictResult" style="margin-top:16px;"></div>
@@ -512,10 +557,20 @@
 
         <!-- Single molecule result visualization -->
         <div class="card" id="resultCard" style="display:none;">
-            <div class="card-title"><span class="icon">📊</span> 预测结果可视化</div>
-            <div class="chart-row">
-                <div class="chart-box"><canvas id="chartGauge"></canvas></div>
-                <div class="chart-box"><canvas id="chartContrib"></canvas></div>
+            <div class="card-title"><span class="icon">📊</span> 预测结果可视化（个体）</div>
+            <div class="gauge-block">
+                <div class="gauge-canvas-wrap"><canvas id="chartGauge"></canvas></div>
+                <div class="gauge-scale">
+                    <span>−1 骨≪血（低沉积）</span>
+                    <span>0 骨≈血</span>
+                    <span>+2 骨≫血（高沉积）</span>
+                </div>
+                <div class="gauge-note">弧形刻度范围 <b>−1 ~ +2</b>（logBBR 取值区间）。左端 −1：骨骼浓度远低于血液；右端 +2：骨骼浓度远高于血液。指针位置即本分子预测值。</div>
+            </div>
+            <div id="contribBox" class="contrib-box" style="display:none;margin-top:18px;">
+                <div class="contrib-box-title">📈 本分子特征贡献（个体层面）</div>
+                <div class="contrib-note">下列为<strong>该分子个体</strong>的特征贡献（重要性 × 标准化特征值），用于解释本条目预测；与「🧬 特征重要性」页签中<strong>模型整体</strong>的重要性不同，请勿混淆。</div>
+                <div class="contrib-canvas-wrap"><canvas id="chartContrib"></canvas></div>
             </div>
         </div>
 
@@ -610,6 +665,32 @@
             <div id="allFeatures" style="font-size:12px;color:var(--text-secondary);word-break:break-all;max-height:400px;overflow-y:auto;">
                 <div class="empty-state"><p>模型未训练，无法显示特征列表</p></div>
             </div>
+        </div>
+    </div>
+
+    <!-- Tab: Data & Model -->
+    <div class="tab-content" id="tab-data">
+        <div class="card">
+            <div class="card-title"><span class="icon">📚</span> 数据来源与质量保证</div>
+            <div class="data-section">
+                <h4>数据集：PTBD（PET 骨分布）数据集 v20240912</h4>
+                <ul>
+                    <li><b>来源</b>：1,056 个化合物，均源自已发表的 PET 显像研究（含 PubMed PMID 与文献 DOI 可追溯）。</li>
+                    <li><b>实验对象</b>：小动物（小鼠 / 大鼠），覆盖多种常用品系。</li>
+                    <li><b>成像方式</b>：基于 <b>PET/CT</b> 活体影像，在给药后 <b>60 min</b> 采集。</li>
+                    <li><b>标准化定量</b>：以 <b>%ID/g</b>（每克组织的注射剂量百分比）统一量化骨与血放射性浓度，计算 BBR = 骨%ID/g ÷ 血%ID/g。</li>
+                    <li><b>放射剂量</b>：注射剂量以 <b>mCi</b>（毫居里）记录，符合 PET 药物的放射剂量单位。</li>
+                </ul>
+                <div class="data-quality">
+                    <strong>为何模型可信？</strong> 训练数据来自标准化、可追溯的动物 PET/CT 实验，统一在 60 min 时间窗与 %ID/g 量纲下采集，排除了采集条件不一致带来的噪声。基于这批<strong>高质量、标准化</strong>的数据训练的模型，其预测结果同样具备较高的可靠性与可重复性，可用于药物骨分布的初步筛选与排序。
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title"><span class="icon">🧪</span> 模型与应用</div>
+            <p style="font-size:13px;color:var(--text-secondary);line-height:1.8;">
+                模型为 LightGBM 梯度提升回归，输入为 <b>Mordred 分子描述符 + Morgan 指纹 + 实验元数据</b>（动物体重、注射剂量等），输出 logBBR。模型以分子结构特征为主导，体重 / 性别 / 注射剂量对 logBBR 影响很小，主要用于结合血药浓度换算<strong>绝对骨浓度</strong>，尤其适用于含 <b>¹⁸F</b> 等放射性核素的 PET 药物。
+            </p>
         </div>
     </div>
 </div>
@@ -774,13 +855,17 @@ function setSmiles(smi) {
 function runExample(smi, weight, gender, dosage, label) {
     document.getElementById('inputSmiles').value = smi;
     document.getElementById('inputWeight').value = weight;
-    document.getElementById('inputGender').value = gender;
     document.getElementById('inputDosage').value = dosage;
     if (label) {
         const el = document.getElementById('exampleNote');
-        if (el) el.textContent = '当前示例：' + label + '（实验条件：体重 ' + weight + 'g / ' + gender + ' / 剂量 ' + dosage + '）';
+        if (el) el.textContent = '当前示例：' + label + '（实验条件：体重 ' + weight + 'g / 剂量 ' + dosage + ' mCi）';
     }
     doPredict();
+}
+
+function setWeight(v) {
+    const el = document.getElementById('inputWeight');
+    if (el) el.value = v;
 }
 
 function doPredict() {
@@ -795,7 +880,6 @@ function doPredict() {
     const payload = {
         smiles: [smiles],
         animal_weights: [parseFloat(document.getElementById('inputWeight').value) || 250],
-        genders: [document.getElementById('inputGender').value],
         injection_dosages: [parseFloat(document.getElementById('inputDosage').value) || 100],
     };
 
@@ -1037,14 +1121,15 @@ function doFeatureContrib() {
     .then(r => r.json())
     .then(data => {
         btn.disabled = false;
-        btn.innerHTML = '📈 查看特征贡献';
+        btn.innerHTML = '📈 本分子特征贡献（个体）';
         if (data.success && data.features) {
+            document.getElementById('contribBox').style.display = 'block';
             drawContribChart(data.features);
         }
     })
     .catch(err => {
         btn.disabled = false;
-        btn.innerHTML = '📈 查看特征贡献';
+        btn.innerHTML = '📈 本分子特征贡献（个体）';
     });
 }
 
@@ -1244,7 +1329,10 @@ function drawGaugeChart(value) {
                 ctx.fillText(value.toFixed(3), left + width/2, top + height/2 - 8);
                 ctx.font = '13px -apple-system, sans-serif';
                 ctx.fillStyle = '#6b7280';
-                ctx.fillText('logBBR', left + width/2, top + height/2 + 22);
+                ctx.fillText('logBBR', left + width/2, top + height/2 + 16);
+                ctx.font = '11px -apple-system, sans-serif';
+                ctx.fillStyle = '#9ca3af';
+                ctx.fillText('范围 −1 ~ +2', left + width/2, top + height/2 + 34);
                 ctx.restore();
             }
         }]
@@ -1277,7 +1365,7 @@ function drawContribChart(features) {
             maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
-                title: { display: true, text: 'Top 15 特征贡献', font: { size: 14 } },
+                title: { display: true, text: '本分子 Top 15 特征贡献（个体）', font: { size: 14 } },
             },
             scales: {
                 x: { title: { display: true, text: '贡献度' } },
